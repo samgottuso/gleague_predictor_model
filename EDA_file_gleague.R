@@ -14,7 +14,7 @@ str(gleague_data)
 first_quarter_minutes<-quantile(gleague_data$G_MP,.25,na.rm = TRUE)
 
 #Filtering out players who don't have enough minutes or games
-gleague_data_filtered<-gleague_data %>%
+gleague_data<-gleague_data %>%
   filter(G_MP>first_quarter_minutes) %>%
   filter(G_G>2)
 
@@ -23,23 +23,35 @@ draft_data<-draft_data_bbref(2000,2017)
 draft_data$PK<-as.numeric(draft_data$PK)
 lotto_picks<-draft_data[draft_data$PK<=14,]
 
-gleague_data_filtered_non_lotto<-subset(gleague_data_filtered,!(gleague_data_filtered$player_page %in% lotto_picks$player_page))
+gleague_data<-subset(gleague_data,!(gleague_data$player_page %in% lotto_picks$player_page))
 #might wwant to look at lottos anyway--either with all the data or seperately
 gleague_data_filtered_lotto<-subset(gleague_data_filtered,(gleague_data_filtered$player_page %in% lotto_picks$player_page))
 
+
+
+  
+
+#Import NBA data
+nba_data<-bbref_web_scraper("NBA",2002,2018)
+
+
+#Write to CSV so that I don't have to re-pull everytime I want to look at the data.
+
+write.csv(gleague_data,'gleague_2002_2018_raw.csv')
+write.csv(nba_data,'NBA_2002_2018_raw.csv')
+
+gleague_data_<-read.csv('gleague_2002_2018_raw.csv')
+nba_data<-read.csv('NBA_2002_2018_raw.csv')
+
 #this little complicated pipe operator seperates out players by season. Then it looks to see if a player was on multiple teams during the season. 
 #It then groups by player and eliminates their non-total statistics for players who had multiple observations per season.
-gleague_grouped<-gleague_data_filtered_non_lotto %>% 
+gleague_grouped<-gleague_data %>% 
   group_by(year)%>%
   mutate(dup=ifelse(duplicated(player_page),"dup","")) %>%
   group_by(player_page,add=TRUE)%>%
   filter(dup!='dup') %>%
   ungroup()
 
-  
-
-#Import NBA data
-nba_data<-bbref_web_scraper("NBA",2002,2018)
 nba_grouped<-nba_data%>%
   group_by(year)%>%
   mutate(dup=ifelse(duplicated(player_page),"dup",""))%>%
@@ -47,26 +59,18 @@ nba_grouped<-nba_data%>%
   filter(dup!='dup')%>%
   ungroup()
 
-#Write to CSV so that I don't have to re-pull everytime I want to look at the data.
-
-write.csv(gleague_data,'gleague_2002_2018_raw.csv')
-write.csv(nba_data,'NBA_2002_2018_raw.csv')
-
 #Cool so who played in the NBA?
 played_in_NBA<-gleague_grouped[gleague_grouped$player_page %in% nba_grouped$player_page,]
 #1395 of 3346 non-Lotto picks played at least 1 game in the NBA, that's actually a lot higher than I thought, I should be able to have more predictive power.
 
 #Merge NBA and gleague data
-merged_data<-full_join(nba_grouped,gleague_grouped,by=c("player_page",'year','Player'))
+nba_grouped$year<-as.numeric(nba_grouped$year)
+gleague_grouped$year<-as.numeric(gleague_grouped$year)
+
+merged_data<-full_join(nba_grouped,gleague_grouped,by=c("Player",'year'))
 merged_data$year<-as.numeric(merged_data$year)
-#Merge looks like it worked as expected. Now I have to replace some NA columns with 0s
-##Note-- this throws the distribution off, is it better to have blanks there instead? 
-# numeric_cols<-c(seq(6,73,1),seq(80,142,1))
-# merged_data[,numeric_cols]<-apply(merged_data[,numeric_cols],2,function(x) as.numeric(x))
-# merged_data[,numeric_cols]<-apply(merged_data[,numeric_cols],2,function(x) replace(x,is.na(x),0))
 
 write.csv(merged_data,'merged_2002_2018.csv')
-#Assign labels to players-- tentatively 1) never played 2) benchwarmer 3) Defensive roleplayer 4) offensive role player 5) Defensive star 6) Offensive star 7)All-NBA 8) Rebound machine 9) point god 
 
 merged_data<-read.csv('merged_2002_2017.csv')
 
